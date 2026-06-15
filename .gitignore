@@ -1,0 +1,6 @@
+# Keine Secrets / lokalen Dateien ins öffentliche Repo
+.env
+.env.*
+node_modules/
+.DS_Store
+*.log
