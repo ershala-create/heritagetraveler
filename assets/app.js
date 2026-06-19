@@ -338,7 +338,7 @@ function groupedHtml(rows) {
       ? `<button data-research="${escapeAttr(k)}" class="ml-2 px-2 py-0.5 rounded-md border border-zinc-200 bg-white hover:bg-zinc-50 text-xs font-normal">🔍 mehr aus dieser Gruppe</button>`
       : '';
     html += `<tr data-group-key="${escapeAttr(k)}" class="bg-zinc-50 cursor-pointer select-none">
-      <td colspan="7" class="px-3 py-2 font-medium text-zinc-700">
+      <td colspan="8" class="px-3 py-2 font-medium text-zinc-700">
         <span class="text-zinc-400 mr-1">${collapsed ? '▸' : '▾'}</span>${escapeHtml(groupLabelOf(k))}
         <span class="text-zinc-400 font-normal">(${items.length})</span>${researchBtn}
       </td></tr>`;
@@ -429,6 +429,9 @@ function rowHtml(h) {
       </select>
     </td>
     <td class="px-3 py-2.5 align-top text-zinc-600 whitespace-nowrap">${dateCell(h)}</td>
+    <td class="px-3 py-2.5 align-top text-zinc-600 max-w-[240px]">
+      ${h.bemerkung ? `<span class="text-xs" title="${escapeAttr(h.bemerkung)}">${escapeHtml(h.bemerkung)}</span>` : '<span class="text-zinc-300">—</span>'}
+    </td>
     <td class="px-3 py-2.5 align-top text-zinc-600">
       ${conflict ? '<div class="text-amber-600 text-xs mb-0.5" title="Gleiche Ansprechperson/E-Mail wie ein bereits kontaktiertes Hotel – vor dem Anschreiben prüfen">⚠ Sammelkontakt</div>' : ''}
       ${contactName ? `<div>${escapeHtml(contactName)}</div>` : ''}
