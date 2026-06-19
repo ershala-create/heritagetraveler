@@ -12,6 +12,8 @@ const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 const STATUS = {
   offen:            { label: 'Offen',          cls: 'bg-slate-100 text-slate-700' },
   angefragt:        { label: 'Angefragt',      cls: 'bg-blue-50 text-blue-700' },
+  zusage:           { label: 'Zusage',         cls: 'bg-green-50 text-green-700' },
+  wiedervorlage:    { label: 'Wiedervorlage',  cls: 'bg-orange-50 text-orange-700' },
   warten:           { label: 'Warten',         cls: 'bg-amber-50 text-amber-700' },
   antwort_negativ:  { label: 'Absage',         cls: 'bg-red-50 text-red-700' },
   kooperiert:       { label: 'Partner',        cls: 'bg-violet-50 text-violet-700' },
@@ -180,7 +182,7 @@ function olderThanDays(dateStr, days) {
 
 // ===================== DOPPELKONTAKT-SCHUTZ =====================
 // "Bereits im Kontakt" = wir haben diesen Kanal schon angefasst.
-const CONTACTED = new Set(['angefragt', 'warten', 'kooperiert']);
+const CONTACTED = new Set(['angefragt', 'zusage', 'warten', 'kooperiert']);
 let contactIndex = { byPerson: new Map(), byEmail: new Map() };
 
 function normStr(s) { return (s || '').trim().toLowerCase(); }
@@ -339,18 +341,41 @@ function researchGroup(gruppe) {
 const QUICK_CHIPS = [
   { key: 'aktiv', label: 'Aktiv' },
   { key: 'bereit', label: 'Bereit zum Anschreiben' },
+  { key: 'zusage', label: 'Zusage' },
   { key: 'nachfassen', label: 'Nachfassen fällig' },
+  { key: 'wiedervorlage', label: 'Wiedervorlage' },
   { key: 'ohne_email', label: 'Ohne E-Mail' },
   { key: 'warten', label: 'Warten' },
   { key: 'partner', label: 'Partner' },
   { key: 'ausgeschlossen', label: 'Ausgeschlossen' },
 ];
+// Anzahl Hotels je Schnellfilter (fuer Chip-Badges)
+function quickCount(key) {
+  const has = (h) => !!(h.email_1 || h.email_allgemein || h.email_2);
+  const old30 = (h) => h.angefragt_am && (Date.now() - new Date(h.angefragt_am).getTime()) > NACHFASS_DAYS * 86400000;
+  return allHotels.filter((h) => {
+    switch (key) {
+      case 'aktiv':          return !HIDE_BY_DEFAULT.includes(h.status);
+      case 'bereit':         return h.status === 'offen';
+      case 'zusage':         return h.status === 'zusage';
+      case 'nachfassen':     return h.status === 'angefragt' && old30(h);
+      case 'wiedervorlage':  return h.status === 'wiedervorlage';
+      case 'ohne_email':     return !has(h) && !HIDE_BY_DEFAULT.includes(h.status);
+      case 'warten':         return h.status === 'warten';
+      case 'partner':        return h.status === 'kooperiert';
+      case 'ausgeschlossen': return h.status === 'ausgeschlossen';
+      default:               return 0;
+    }
+  }).length;
+}
 function renderChips() {
   const wrap = $('quick-chips');
   if (!wrap) return;
   wrap.innerHTML = QUICK_CHIPS.map((c) => {
     const on = activeQuick === c.key;
-    return `<button data-quick="${c.key}" class="text-xs px-3 py-1.5 rounded-full border transition-colors ${on ? 'bg-zinc-900 text-white border-zinc-900' : 'bg-white text-zinc-600 border-zinc-200 hover:bg-zinc-50'}">${c.label}</button>`;
+    const n = quickCount(c.key);
+    const badge = `<span class="ml-1 ${on ? 'opacity-80' : 'text-zinc-400'}">${n}</span>`;
+    return `<button data-quick="${c.key}" class="text-xs px-3 py-1.5 rounded-full border transition-colors ${on ? 'bg-zinc-900 text-white border-zinc-900' : 'bg-white text-zinc-600 border-zinc-200 hover:bg-zinc-50'}">${c.label}${badge}</button>`;
   }).join('');
   wrap.querySelectorAll('button[data-quick]').forEach((b) => {
     b.addEventListener('click', () => applyQuick(b.dataset.quick));
@@ -360,7 +385,7 @@ function applyQuick(key) {
   quickFilter = null;
   activeQuick = key;
   const s = $('filter-status');
-  const map = { bereit: 'offen', warten: 'warten', partner: 'kooperiert', ausgeschlossen: 'ausgeschlossen' };
+  const map = { bereit: 'offen', zusage: 'zusage', wiedervorlage: 'wiedervorlage', warten: 'warten', partner: 'kooperiert', ausgeschlossen: 'ausgeschlossen' };
   if (key === 'aktiv') s.value = '';
   else if (key === 'nachfassen') { s.value = 'angefragt'; quickFilter = 'nachfassen'; }
   else if (key === 'ohne_email') { s.value = ''; quickFilter = 'ohne_email'; }
