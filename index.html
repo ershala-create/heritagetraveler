@@ -111,13 +111,19 @@
 
       <div id="status-summary" class="flex flex-wrap gap-2 mb-3"></div>
 
+      <details class="mb-3 bg-white border border-zinc-200 rounded-xl card-shadow">
+        <summary class="cursor-pointer select-none px-4 py-2.5 text-xs font-medium text-zinc-600 hover:text-zinc-900">Status-Legende — was bedeuten die Status?</summary>
+        <div id="status-legend" class="px-4 pb-3 pt-1"></div>
+      </details>
+
       <div class="bg-white border border-zinc-200 rounded-xl card-shadow overflow-hidden">
         <div class="tbl-wrap overflow-auto max-h-[calc(100vh-230px)]">
           <table class="w-full text-left border-collapse">
             <thead class="text-xs text-zinc-500 border-b border-zinc-200">
               <tr>
                 <th data-sort="hotelname" class="px-3 py-2.5 font-medium cursor-pointer hover:text-zinc-900 select-none">Hotel</th>
-                <th data-sort="ort" class="px-3 py-2.5 font-medium cursor-pointer hover:text-zinc-900 select-none">Ort / Land</th>
+                <th data-sort="land" class="px-3 py-2.5 font-medium cursor-pointer hover:text-zinc-900 select-none">Land</th>
+                <th data-sort="region" class="px-3 py-2.5 font-medium cursor-pointer hover:text-zinc-900 select-none">Region</th>
                 <th data-sort="status" class="px-3 py-2.5 font-medium cursor-pointer hover:text-zinc-900 select-none">Status</th>
                 <th data-sort="angefragt_am" class="px-3 py-2.5 font-medium cursor-pointer hover:text-zinc-900 select-none">Angefragt</th>
                 <th class="px-3 py-2.5 font-medium">Kontakt</th>
@@ -183,6 +189,6 @@
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="assets/app.js?v=15" defer></script>
+  <script src="assets/app.js?v=16" defer></script>
 </body>
 </html>

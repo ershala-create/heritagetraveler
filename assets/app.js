@@ -11,6 +11,7 @@ const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 // ---- Status definitions (label + pill colors) ----
 const STATUS = {
   offen:            { label: 'Offen',          cls: 'bg-slate-100 text-slate-700' },
+  entwurf:          { label: 'Entwurf',        cls: 'bg-teal-50 text-teal-700' },
   angefragt:        { label: 'Angefragt',      cls: 'bg-blue-50 text-blue-700' },
   zusage:           { label: 'Zusage',         cls: 'bg-green-50 text-green-700' },
   wiedervorlage:    { label: 'Wiedervorlage',  cls: 'bg-orange-50 text-orange-700' },
@@ -20,6 +21,19 @@ const STATUS = {
   ausgeschlossen:   { label: 'Ausgeschlossen', cls: 'bg-zinc-100 text-zinc-500' },
 };
 const STATUS_KEYS = Object.keys(STATUS);
+
+// ---- Status-Legende (Erklaerung je Status, fuer das aufklappbare Panel) ----
+const LEGEND = [
+  ['offen', 'Recherchiert, aber noch KEIN Entwurf — hier muss noch eine Mail vorbereitet werden.'],
+  ['entwurf', 'Entwurf liegt fertig in Gmail, noch nicht gesendet — die Sende-Liste.'],
+  ['angefragt', 'Mail gesendet, wartet auf Antwort des Hotels.'],
+  ['zusage', 'Hotel hat positiv geantwortet, Kooperation in Verhandlung (noch nicht final).'],
+  ['wiedervorlage', 'Temporär abgesagt (ausgebucht/Saison) — später erneut anfragen.'],
+  ['warten', 'Zurückgestellt: gleiche Gruppe/Person schon in Kontakt (Doppelkontakt) oder ganze Region zurückgestellt (z.B. China).'],
+  ['kooperiert', 'Kooperation abgeschlossen — bereits zu Gast gewesen (Partner).'],
+  ['antwort_negativ', 'Endgültig abgelehnt.'],
+  ['ausgeschlossen', 'Passt nicht (adults-only, geschlossen) oder Doppeleintrag.'],
+];
 
 // ---- State ----
 let allHotels = [];
@@ -137,6 +151,7 @@ async function loadHotels() {
   allHotels = data || [];
   buildContactIndex();
   buildFilters();
+  renderLegend();
   render();
 }
 
@@ -323,7 +338,7 @@ function groupedHtml(rows) {
       ? `<button data-research="${escapeAttr(k)}" class="ml-2 px-2 py-0.5 rounded-md border border-zinc-200 bg-white hover:bg-zinc-50 text-xs font-normal">🔍 mehr aus dieser Gruppe</button>`
       : '';
     html += `<tr data-group-key="${escapeAttr(k)}" class="bg-zinc-50 cursor-pointer select-none">
-      <td colspan="6" class="px-3 py-2 font-medium text-zinc-700">
+      <td colspan="7" class="px-3 py-2 font-medium text-zinc-700">
         <span class="text-zinc-400 mr-1">${collapsed ? '▸' : '▾'}</span>${escapeHtml(groupLabelOf(k))}
         <span class="text-zinc-400 font-normal">(${items.length})</span>${researchBtn}
       </td></tr>`;
@@ -339,15 +354,16 @@ function researchGroup(gruppe) {
 
 // ---- Quick-Chips (Schnellfilter) ----
 const QUICK_CHIPS = [
-  { key: 'aktiv', label: 'Aktiv' },
-  { key: 'bereit', label: 'Bereit zum Anschreiben' },
-  { key: 'zusage', label: 'Zusage' },
-  { key: 'nachfassen', label: 'Nachfassen fällig' },
-  { key: 'wiedervorlage', label: 'Wiedervorlage' },
-  { key: 'ohne_email', label: 'Ohne E-Mail' },
-  { key: 'warten', label: 'Warten' },
-  { key: 'partner', label: 'Partner' },
-  { key: 'ausgeschlossen', label: 'Ausgeschlossen' },
+  { key: 'aktiv', label: 'Aktiv', hint: 'Alle Hotels ausser Partner, Absagen und Ausgeschlossene — die aktive Arbeitsliste.' },
+  { key: 'bereit', label: 'Bereit zum Anschreiben', hint: 'Recherchiert, aber noch KEIN Entwurf erstellt — hier muss noch eine Mail vorbereitet werden.' },
+  { key: 'entwurf', label: 'Entwurf bereit', hint: 'Entwurf liegt fertig in Gmail, aber noch nicht gesendet — Miris Sende-Liste.' },
+  { key: 'zusage', label: 'Zusage', hint: 'Hotel hat positiv geantwortet, Kooperation in Verhandlung (noch nicht final).' },
+  { key: 'nachfassen', label: 'Nachfassen fällig', hint: 'Schon angefragt, aber seit über 30 Tagen keine Antwort — freundlich erinnern.' },
+  { key: 'wiedervorlage', label: 'Wiedervorlage', hint: 'Temporär abgesagt (ausgebucht/Saison) — später erneut anfragen.' },
+  { key: 'ohne_email', label: 'Ohne E-Mail', hint: 'Noch keine E-Mail-Adresse hinterlegt — Adresse muss recherchiert werden.' },
+  { key: 'warten', label: 'Warten', hint: 'Zurückgestellt: gleiche Gruppe/Person bereits in Kontakt (Doppelkontakt-Schutz) oder ganze Region zurückgestellt (z.B. China).' },
+  { key: 'partner', label: 'Partner', hint: 'Kooperation abgeschlossen — bereits zu Gast gewesen.' },
+  { key: 'ausgeschlossen', label: 'Ausgeschlossen', hint: 'Passt nicht (z.B. adults-only, geschlossen) oder Doppeleintrag.' },
 ];
 // Anzahl Hotels je Schnellfilter (fuer Chip-Badges)
 function quickCount(key) {
@@ -357,6 +373,7 @@ function quickCount(key) {
     switch (key) {
       case 'aktiv':          return !HIDE_BY_DEFAULT.includes(h.status);
       case 'bereit':         return h.status === 'offen';
+      case 'entwurf':        return h.status === 'entwurf';
       case 'zusage':         return h.status === 'zusage';
       case 'nachfassen':     return h.status === 'angefragt' && old30(h);
       case 'wiedervorlage':  return h.status === 'wiedervorlage';
@@ -375,7 +392,7 @@ function renderChips() {
     const on = activeQuick === c.key;
     const n = quickCount(c.key);
     const badge = `<span class="ml-1 ${on ? 'opacity-80' : 'text-zinc-400'}">${n}</span>`;
-    return `<button data-quick="${c.key}" class="text-xs px-3 py-1.5 rounded-full border transition-colors ${on ? 'bg-zinc-900 text-white border-zinc-900' : 'bg-white text-zinc-600 border-zinc-200 hover:bg-zinc-50'}">${c.label}${badge}</button>`;
+    return `<button data-quick="${c.key}" title="${escapeAttr(c.hint || '')}" class="text-xs px-3 py-1.5 rounded-full border transition-colors ${on ? 'bg-zinc-900 text-white border-zinc-900' : 'bg-white text-zinc-600 border-zinc-200 hover:bg-zinc-50'}">${c.label}${badge}</button>`;
   }).join('');
   wrap.querySelectorAll('button[data-quick]').forEach((b) => {
     b.addEventListener('click', () => applyQuick(b.dataset.quick));
@@ -385,7 +402,7 @@ function applyQuick(key) {
   quickFilter = null;
   activeQuick = key;
   const s = $('filter-status');
-  const map = { bereit: 'offen', zusage: 'zusage', wiedervorlage: 'wiedervorlage', warten: 'warten', partner: 'kooperiert', ausgeschlossen: 'ausgeschlossen' };
+  const map = { bereit: 'offen', entwurf: 'entwurf', zusage: 'zusage', wiedervorlage: 'wiedervorlage', warten: 'warten', partner: 'kooperiert', ausgeschlossen: 'ausgeschlossen' };
   if (key === 'aktiv') s.value = '';
   else if (key === 'nachfassen') { s.value = 'angefragt'; quickFilter = 'nachfassen'; }
   else if (key === 'ohne_email') { s.value = ''; quickFilter = 'ohne_email'; }
@@ -396,18 +413,16 @@ function applyQuick(key) {
 function rowHtml(h) {
   const contactName = h.ansprechperson_1 || '';
   const contactMail = h.email_1 || h.email_allgemein || h.email_2 || '';
-  const ortLand = [h.ort, h.land].filter(Boolean).join(', ');
   const conflict = hasContactConflict(h);
   return `
   <tr class="hover:bg-zinc-50/60 transition-colors">
     <td class="px-3 py-2.5 align-top">
       <div class="font-medium text-zinc-900">${escapeHtml(h.hotelname)}</div>
+      ${h.ort ? `<div class="text-xs text-zinc-400">${escapeHtml(h.ort)}</div>` : ''}
       ${h.gruppe ? `<div class="text-xs text-zinc-400">${escapeHtml(h.gruppe)}</div>` : ''}
     </td>
-    <td class="px-3 py-2.5 align-top text-zinc-600">
-      <div>${escapeHtml(ortLand || '—')}</div>
-      ${h.region ? `<div class="text-xs text-zinc-400">${escapeHtml(h.region)}</div>` : ''}
-    </td>
+    <td class="px-3 py-2.5 align-top text-zinc-600 whitespace-nowrap">${escapeHtml(h.land || '—')}</td>
+    <td class="px-3 py-2.5 align-top text-zinc-600">${escapeHtml(h.region || '—')}</td>
     <td class="px-3 py-2.5 align-top">
       <select data-id="${h.id}" class="${statusSelectCls(h.status)}">
         ${STATUS_KEYS.map((k) => `<option value="${k}" ${k === h.status ? 'selected' : ''}>${STATUS[k].label}</option>`).join('')}
@@ -438,6 +453,21 @@ function renderSummary() {
     .filter((k) => counts[k] > 0)
     .map((k) => `<span class="text-xs rounded-full px-2.5 py-1 ${STATUS[k].cls}">${STATUS[k].label}: ${counts[k]}</span>`)
     .join('');
+}
+
+// ---- Legende rendern (einmal, statisch) ----
+function renderLegend() {
+  const el = $('status-legend');
+  if (!el) return;
+  el.innerHTML = LEGEND.map(([k, txt]) =>
+    `<div class="flex items-start gap-2 py-1">
+       <span class="text-xs rounded-full px-2.5 py-1 whitespace-nowrap ${STATUS[k].cls}">${STATUS[k].label}</span>
+       <span class="text-xs text-zinc-600">${txt}</span>
+     </div>`).join('') +
+    `<div class="flex items-start gap-2 py-1 border-t border-zinc-100 mt-1 pt-2">
+       <span class="text-xs rounded-full px-2.5 py-1 whitespace-nowrap bg-zinc-100 text-zinc-600">Nachfassen fällig</span>
+       <span class="text-xs text-zinc-600">Kein eigener Status, sondern ein Filter: „angefragt" + seit über 30 Tagen keine Antwort.</span>
+     </div>`;
 }
 
 // ===================== EMAIL MODAL =====================
