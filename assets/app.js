@@ -45,6 +45,8 @@ let quickFilter = null;       // null | 'nachfassen' | 'ohne_email'
 let activeQuick = 'aktiv';    // welcher Quick-Chip ist aktiv (Highlight)
 let groupBy = '';             // '' | 'land' | 'region' | 'gruppe' | 'status'
 const collapsedGroups = new Set();
+let activeTab = 'hotels';     // 'alle' | 'hotels' | 'gruppen'
+let gruppenDrilldown = null;  // null | normierter Gruppen-Key (Drilldown-Ansicht)
 const NACHFASS_DAYS = 30;     // Schwelle fuer "Nachfassen faellig"
 const HIDE_BY_DEFAULT = ['kooperiert', 'ausgeschlossen', 'antwort_negativ']; // Partner/Ausgeschlossen/Absage ausgeblendet bis explizit gefiltert
 
@@ -251,8 +253,9 @@ function getFiltered() {
   const fLand = $('filter-land').value;
   const fGruppe = $('filter-gruppe').value;
   let rows = allHotels.filter((h) => {
-    // Partner + Ausgeschlossen standardmaessig ausblenden (nur via Status-Filter sichtbar)
-    if (!fStatus && HIDE_BY_DEFAULT.includes(h.status)) return false;
+    // Partner + Ausgeschlossen standardmaessig ausblenden (nur via Status-Filter sichtbar);
+    // im "Alle"-Tab wird NICHTS ausgeblendet (auch Ausgeschlossene/Partner/Absagen sichtbar)
+    if (activeTab !== 'alle' && !fStatus && HIDE_BY_DEFAULT.includes(h.status)) return false;
     if (fStatus && h.status !== fStatus) return false;
     if (fLand && h.land !== fLand) return false;
     if (fGruppe && h.gruppe !== fGruppe) return false;
@@ -352,6 +355,131 @@ function researchGroup(gruppe) {
   alert('Recherche-Auftrag in die Zwischenablage kopiert — füge ihn in Claude Code ein:\n\n' + prompt);
 }
 
+// ===================== TABS (Alle / Hotels / Gruppen) =====================
+function switchTab(tab) {
+  activeTab = tab;
+  gruppenDrilldown = null;
+  document.querySelectorAll('.tab-btn').forEach((b) => {
+    const on = b.dataset.tab === tab;
+    b.className = `tab-btn px-5 min-h-[44px] text-sm font-medium border-b-2 -mb-px ${on ? 'border-zinc-900 text-zinc-900' : 'border-transparent text-zinc-500 hover:text-zinc-900'}`;
+  });
+  const showHotels = (tab === 'alle' || tab === 'hotels');
+  $('hotels-panel').classList.toggle('hidden', !showHotels);
+  $('gruppen-panel').classList.toggle('hidden', tab !== 'gruppen');
+  // Quick-Chips sind die Aktiv-Arbeitsliste -> nur im Hotels-Tab sichtbar
+  $('quick-chips').classList.toggle('hidden', tab !== 'hotels');
+  if (tab === 'alle') { quickFilter = null; activeQuick = null; $('filter-status').value = ''; }
+  if (tab === 'hotels' && !activeQuick) { activeQuick = 'aktiv'; $('filter-status').value = ''; }
+  if (showHotels) render();
+  if (tab === 'gruppen') renderGruppen();
+}
+
+// ===================== GRUPPEN-ANSICHT =====================
+// gleiche Schreibweisen zusammenfassen (Key normiert; Label = erste Schreibweise)
+function normalizeGruppe(s) {
+  return (s || '').trim().toLowerCase().replace(/\s+/g, ' ').replace(/^the\s+/, '');
+}
+const GRUPPE_CONTACTED = new Set(['angefragt', 'zusage', 'warten', 'wiedervorlage', 'kooperiert', 'antwort_negativ', 'entwurf']);
+
+function buildGruppenMap() {
+  const map = new Map(); // normKey -> { label, hotels: [] }
+  for (const h of allHotels) {
+    const g = (h.gruppe || '').trim();
+    if (!g || g === '-') continue;
+    const key = normalizeGruppe(g);
+    if (!map.has(key)) map.set(key, { label: g, hotels: [] });
+    map.get(key).hotels.push(h);
+  }
+  return map;
+}
+
+function renderGruppen() {
+  if (gruppenDrilldown !== null) { renderDrilldown(gruppenDrilldown); return; }
+  const map = buildGruppenMap();
+  const entries = [...map.entries()].sort((a, b) =>
+    b[1].hotels.length - a[1].hotels.length || a[1].label.localeCompare(b[1].label));
+  $('count-badge').textContent = `${entries.length} Gruppen`;
+  const cards = entries.map(([key, g]) => {
+    const total = g.hotels.length;
+    const kontaktiert = g.hotels.filter((h) => GRUPPE_CONTACTED.has(h.status)).length;
+    const offen = total - kontaktiert;
+    const pct = total ? Math.round(kontaktiert / total * 100) : 0;
+    return `
+    <div data-gruppe="${escapeAttr(key)}" class="gruppe-card bg-white border border-zinc-200 rounded-xl card-shadow mb-2 px-4 py-3 cursor-pointer hover:bg-zinc-50 transition-colors">
+      <div class="flex items-center justify-between gap-3">
+        <div class="min-w-0">
+          <div class="font-semibold text-zinc-900 text-sm truncate">${escapeHtml(g.label)}</div>
+          <div class="text-xs text-zinc-400 mt-0.5">${total} Hotels · ${kontaktiert} kontaktiert · <span class="${offen ? 'text-zinc-600' : 'text-zinc-300'}">${offen} offen</span></div>
+        </div>
+        <div class="flex items-center gap-2 shrink-0">
+          <div class="w-16 sm:w-28 h-1.5 bg-zinc-100 rounded-full overflow-hidden">
+            <div class="h-full bg-zinc-900 rounded-full" style="width:${pct}%"></div>
+          </div>
+          <span class="text-xs text-zinc-500 w-9 text-right tabular-nums">${pct}%</span>
+          <span class="text-zinc-300">›</span>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+  $('gruppen-body').innerHTML =
+    `<p class="text-xs text-zinc-500 mb-3">${entries.length} Gruppen · tippe eine Gruppe an, um alle Häuser mit Status zu sehen.</p>` +
+    (cards || '<p class="text-zinc-400 text-sm p-4">Keine Gruppen gefunden.</p>');
+  $('gruppen-body').querySelectorAll('.gruppe-card').forEach((el) => {
+    el.addEventListener('click', () => { gruppenDrilldown = el.dataset.gruppe; renderGruppen(); });
+  });
+}
+
+function renderDrilldown(key) {
+  const entry = buildGruppenMap().get(key);
+  if (!entry) { gruppenDrilldown = null; renderGruppen(); return; }
+  const hotels = [...entry.hotels].sort((a, b) => a.hotelname.localeCompare(b.hotelname));
+  const kontaktiert = hotels.filter((h) => GRUPPE_CONTACTED.has(h.status)).length;
+  $('count-badge').textContent = `${entry.label} · ${hotels.length} Hotels`;
+  $('gruppen-body').innerHTML = `
+    <button id="drilldown-back" class="mb-3 text-xs px-3 py-2 rounded-lg border border-zinc-200 hover:bg-zinc-50">← Alle Gruppen</button>
+    <div class="mb-3">
+      <h2 class="text-base font-semibold">${escapeHtml(entry.label)}</h2>
+      <p class="text-xs text-zinc-500 mt-0.5">${hotels.length} Hotels · ${kontaktiert} kontaktiert · ${hotels.length - kontaktiert} offen</p>
+    </div>
+    <div class="space-y-2">${hotels.map(gruppeHotelCard).join('')}</div>`;
+  $('drilldown-back').addEventListener('click', () => { gruppenDrilldown = null; renderGruppen(); });
+  wireGruppenCards($('gruppen-body'));
+}
+
+// Hotel-Karte im Gruppen-Drilldown (mobile-first statt Tabelle)
+function gruppeHotelCard(h) {
+  const mail = h.email_1 || h.email_allgemein || h.email_2 || '';
+  const datum = h.angefragt_am ? formatDate(h.angefragt_am) : '';
+  const meta = [h.ort, h.land].filter(Boolean).join(', ');
+  return `
+  <div class="bg-white border border-zinc-200 rounded-xl card-shadow px-4 py-3">
+    <div class="flex items-start justify-between gap-3">
+      <div class="min-w-0">
+        <div class="font-medium text-zinc-900 text-sm">${escapeHtml(h.hotelname)}</div>
+        <div class="text-xs text-zinc-400 mt-0.5">${escapeHtml(meta || '—')}${datum ? ' · angefragt ' + datum : ''}</div>
+      </div>
+      <button data-mail="${h.id}" class="shrink-0 px-3 py-1.5 rounded-lg border border-zinc-200 hover:bg-zinc-50 text-xs whitespace-nowrap" ${mail ? '' : 'disabled style="opacity:.4"'}>✉ E-Mail</button>
+    </div>
+    <div class="mt-2">
+      <select data-id="${h.id}" class="${statusSelectCls(h.status)}">
+        ${STATUS_KEYS.map((k) => `<option value="${k}" ${k === h.status ? 'selected' : ''}>${STATUS[k].label}</option>`).join('')}
+      </select>
+    </div>
+  </div>`;
+}
+
+function wireGruppenCards(container) {
+  container.querySelectorAll('select[data-id]').forEach((sel) => {
+    sel.addEventListener('change', async (e) => {
+      const ok = await updateStatus(e.target.dataset.id, e.target.value);
+      if (ok) renderGruppen();
+    });
+  });
+  container.querySelectorAll('button[data-mail]').forEach((b) => {
+    b.addEventListener('click', () => openEmail(b.dataset.mail));
+  });
+}
+
 // ---- Quick-Chips (Schnellfilter) ----
 const QUICK_CHIPS = [
   { key: 'aktiv', label: 'Aktiv', hint: 'Alle Hotels ausser Partner, Absagen und Ausgeschlossene — die aktive Arbeitsliste.' },
@@ -422,14 +550,14 @@ function rowHtml(h) {
       ${h.gruppe ? `<div class="text-xs text-zinc-400">${escapeHtml(h.gruppe)}</div>` : ''}
     </td>
     <td class="px-3 py-2.5 align-top text-zinc-600 whitespace-nowrap">${escapeHtml(h.land || '—')}</td>
-    <td class="px-3 py-2.5 align-top text-zinc-600">${escapeHtml(h.region || '—')}</td>
+    <td class="px-3 py-2.5 align-top text-zinc-600 hidden md:table-cell">${escapeHtml(h.region || '—')}</td>
     <td class="px-3 py-2.5 align-top">
       <select data-id="${h.id}" class="${statusSelectCls(h.status)}">
         ${STATUS_KEYS.map((k) => `<option value="${k}" ${k === h.status ? 'selected' : ''}>${STATUS[k].label}</option>`).join('')}
       </select>
     </td>
     <td class="px-3 py-2.5 align-top text-zinc-600 whitespace-nowrap">${dateCell(h)}</td>
-    <td class="px-3 py-2.5 align-top text-zinc-600 max-w-[240px]">
+    <td class="px-3 py-2.5 align-top text-zinc-600 max-w-[240px] hidden md:table-cell">
       ${h.bemerkung ? `<span class="text-xs" title="${escapeAttr(h.bemerkung)}">${escapeHtml(h.bemerkung)}</span>` : '<span class="text-zinc-300">—</span>'}
     </td>
     <td class="px-3 py-2.5 align-top text-zinc-600">
@@ -555,6 +683,11 @@ document.querySelectorAll('th[data-sort]').forEach((th) => {
 });
 
 $('export-btn').addEventListener('click', exportCsv);
+
+// ---- Tab-Umschaltung (Alle / Hotels / Gruppen) ----
+document.querySelectorAll('.tab-btn').forEach((b) => {
+  b.addEventListener('click', () => switchTab(b.dataset.tab));
+});
 
 function exportCsv() {
   const rows = getFiltered();
