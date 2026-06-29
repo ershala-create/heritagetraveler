@@ -722,6 +722,52 @@ function debounce(fn, ms) {
   return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); };
 }
 
+// ===================== FEEDBACK =====================
+(function initFeedback() {
+  const btn = document.getElementById('feedback-btn');
+  const modal = document.getElementById('feedback-modal');
+  const overlay = document.getElementById('feedback-overlay');
+  const textarea = document.getElementById('feedback-text');
+  const submitBtn = document.getElementById('feedback-submit');
+  const thanks = document.getElementById('feedback-thanks');
+  const form = document.getElementById('feedback-form');
+
+  function openFeedback() {
+    textarea.value = '';
+    thanks.classList.add('hidden');
+    form.classList.remove('hidden');
+    submitBtn.disabled = false;
+    submitBtn.textContent = 'Absenden';
+    modal.classList.remove('hidden');
+    textarea.focus();
+  }
+  function closeFeedback() {
+    modal.classList.add('hidden');
+  }
+
+  btn.addEventListener('click', openFeedback);
+  overlay.addEventListener('click', closeFeedback);
+  document.getElementById('feedback-close').addEventListener('click', closeFeedback);
+
+  document.getElementById('feedback-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const text = textarea.value.trim();
+    if (!text) return;
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Speichern…';
+    const { error } = await sb.from('feedback').insert({ text });
+    if (error) {
+      console.error('Feedback-Fehler:', error);
+      submitBtn.disabled = false;
+      submitBtn.textContent = 'Absenden';
+      return;
+    }
+    form.classList.add('hidden');
+    thanks.classList.remove('hidden');
+    setTimeout(closeFeedback, 1800);
+  });
+})();
+
 // ===================== BOOT =====================
 (async () => {
   const { data } = await sb.auth.getSession();
