@@ -731,40 +731,52 @@ function debounce(fn, ms) {
   const submitBtn = document.getElementById('feedback-submit');
   const thanks = document.getElementById('feedback-thanks');
   const form = document.getElementById('feedback-form');
+  const errEl = document.getElementById('feedback-error');
 
   function openFeedback() {
     textarea.value = '';
     thanks.classList.add('hidden');
     form.classList.remove('hidden');
+    errEl.classList.add('hidden');
+    errEl.textContent = '';
     submitBtn.disabled = false;
     submitBtn.textContent = 'Absenden';
     modal.classList.remove('hidden');
-    textarea.focus();
+    // kurze Verzögerung damit Modal im DOM sichtbar ist, dann fokussieren + scrollen
+    setTimeout(() => {
+      textarea.focus();
+      textarea.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 80);
   }
   function closeFeedback() {
     modal.classList.add('hidden');
   }
 
   btn.addEventListener('click', openFeedback);
-  overlay.addEventListener('click', closeFeedback);
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) closeFeedback(); });
   document.getElementById('feedback-close').addEventListener('click', closeFeedback);
 
-  document.getElementById('feedback-form').addEventListener('submit', async (e) => {
+  form.addEventListener('submit', async (e) => {
     e.preventDefault();
     const text = textarea.value.trim();
     if (!text) return;
+    errEl.classList.add('hidden');
     submitBtn.disabled = true;
     submitBtn.textContent = 'Speichern…';
-    const { error } = await sb.from('feedback').insert({ text });
+    // Spalte heisst "message" (nicht "text") — DB-Schema-korrekter Insert
+    const { error } = await sb.from('feedback').insert({ message: text });
     if (error) {
       console.error('Feedback-Fehler:', error);
+      errEl.textContent = 'Fehler beim Speichern: ' + error.message;
+      errEl.classList.remove('hidden');
       submitBtn.disabled = false;
       submitBtn.textContent = 'Absenden';
       return;
     }
+    textarea.value = '';
     form.classList.add('hidden');
     thanks.classList.remove('hidden');
-    setTimeout(closeFeedback, 1800);
+    setTimeout(closeFeedback, 1500);
   });
 })();
 
