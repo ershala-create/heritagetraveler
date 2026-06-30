@@ -551,7 +551,11 @@ function rowHtml(h) {
     </td>
     <td class="px-3 py-2.5 align-top text-zinc-600 whitespace-nowrap">${dateCell(h)}</td>
     <td class="px-3 py-2.5 align-top text-zinc-600 max-w-[240px] hidden md:table-cell">
-      ${h.bemerkung ? `<span class="text-xs" title="${escapeAttr(h.bemerkung)}">${escapeHtml(h.bemerkung)}</span>` : '<span class="text-zinc-300">—</span>'}
+      ${h.bemerkung
+        ? h.bemerkung.split('·').map(s => s.trim()).filter(Boolean).map(s =>
+            `<span class="inline-block text-xs px-2 py-0.5 rounded-full bg-zinc-100 text-zinc-600 border border-zinc-200 mr-1 mb-1">${escapeHtml(s)}</span>`
+          ).join('')
+        : '<span class="text-zinc-300">—</span>'}
     </td>
     <td class="px-3 py-2.5 align-top text-zinc-600 max-w-[220px]">
       ${conflict ? '<div class="text-amber-600 text-xs mb-0.5" title="Gleiche Ansprechperson/E-Mail wie ein bereits kontaktiertes Hotel – vor dem Anschreiben prüfen">⚠ Sammelkontakt</div>' : ''}
