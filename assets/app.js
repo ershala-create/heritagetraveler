@@ -260,6 +260,7 @@ function getFiltered() {
     if (fLand && h.land !== fLand) return false;
     if (fGruppe && h.gruppe !== fGruppe) return false;
     if (quickFilter === 'ohne_email' && hasEmail(h)) return false;
+    if (quickFilter === 'alt_offen' && !h.alt_offen) return false;
     if (quickFilter === 'nachfassen' && !(h.status === 'angefragt' && olderThanDays(h.angefragt_am, NACHFASS_DAYS))) return false;
     if (q) {
       const hay = [h.hotelname, h.ort, h.region, h.gruppe, h.email_1, h.email_2, h.email_allgemein, h.ansprechperson_1]
@@ -484,6 +485,8 @@ const QUICK_CHIPS = [
   { key: 'ohne_email', label: 'Ohne E-Mail', hint: 'Noch keine E-Mail-Adresse hinterlegt — Adresse muss recherchiert werden.' },
   { key: 'warten', label: 'Warten', hint: 'Zurückgestellt: gleiche Gruppe/Person bereits in Kontakt (Doppelkontakt-Schutz) oder ganze Region zurückgestellt (z.B. China).' },
   { key: 'partner', label: 'Partner', hint: 'Kooperation abgeschlossen — bereits zu Gast gewesen.' },
+  { key: 'absagen', label: 'Absagen', hint: 'Hotel hat endgültig abgelehnt — die Absagen-Liste.' },
+  { key: 'alt_offen', label: 'Alt-Konto offen', hint: 'Nur vom alten @heritagetraveler.com-Konto angeschrieben (wahrscheinlich im Spam), nie per Gmail — Kandidaten zum Wiederanschreiben. Temporärer Filter.' },
   { key: 'ausgeschlossen', label: 'Ausgeschlossen', hint: 'Passt nicht (z.B. adults-only, geschlossen) oder Doppeleintrag.' },
 ];
 // Anzahl Hotels je Schnellfilter (fuer Chip-Badges)
@@ -501,6 +504,8 @@ function quickCount(key) {
       case 'ohne_email':     return !has(h) && !HIDE_BY_DEFAULT.includes(h.status);
       case 'warten':         return h.status === 'warten';
       case 'partner':        return h.status === 'kooperiert';
+      case 'absagen':        return h.status === 'antwort_negativ';
+      case 'alt_offen':      return h.alt_offen === true;
       case 'ausgeschlossen': return h.status === 'ausgeschlossen';
       default:               return 0;
     }
@@ -523,10 +528,11 @@ function applyQuick(key) {
   quickFilter = null;
   activeQuick = key;
   const s = $('filter-status');
-  const map = { bereit: 'offen', entwurf: 'entwurf', zusage: 'zusage', wiedervorlage: 'wiedervorlage', warten: 'warten', partner: 'kooperiert', ausgeschlossen: 'ausgeschlossen' };
+  const map = { bereit: 'offen', entwurf: 'entwurf', zusage: 'zusage', wiedervorlage: 'wiedervorlage', warten: 'warten', partner: 'kooperiert', absagen: 'antwort_negativ', ausgeschlossen: 'ausgeschlossen' };
   if (key === 'aktiv') s.value = '';
   else if (key === 'nachfassen') { s.value = 'angefragt'; quickFilter = 'nachfassen'; }
   else if (key === 'ohne_email') { s.value = ''; quickFilter = 'ohne_email'; }
+  else if (key === 'alt_offen') { s.value = ''; quickFilter = 'alt_offen'; }
   else s.value = map[key] || '';
   render();
 }
